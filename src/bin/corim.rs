@@ -9,7 +9,6 @@ enum Command {
     PrintComid { path: PathBuf },
     PrintCorim { path: PathBuf },
     PrintSignedCorim { path: PathBuf },
-    RoundTrip { path: PathBuf },
 }
 
 #[derive(Debug, Parser)]

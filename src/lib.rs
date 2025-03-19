@@ -409,6 +409,31 @@ pub struct MeasurementValuesMap {
 }
 }
 
+impl MeasurementValuesMap {
+    fn new_digest(alg: usize, val: Vec<u8>) -> Self {
+        MeasurementValuesMap {
+            version: None,
+            svn: None,
+            flags: None,
+            raw_value: None,
+            raw_value_mask: None,
+            mac_addr: None,
+            ip_addr: None,
+            serial_number: None,
+            ueid: None,
+            uuid: None,
+            name: None,
+            cryptokeys: None,
+            digests: Some(vec![WrappedDigests {
+                wrapped: vec![Digest {
+                    alg,
+                    val: TaggedBytes::Bytes(val),
+                }],
+            }]),
+        }
+    }
+}
+
 // 5.1.4.  Triples
 // TODO add the rest of the fields, these all look very similar to `reference-triple`
 // but with slight variations
@@ -439,6 +464,18 @@ pub struct ClassMap {
 }
 }
 
+impl ClassMap {
+    fn with_vendor(vendor: String) -> Self {
+        ClassMap {
+            class_id: None,
+            vendor: Some(vendor),
+            model: None,
+            layer: None,
+            index: None,
+        }
+    }
+}
+
 // 5.1.4.1.  Environments
 serde_workaround! {
 #[derive(Debug, Clone)]
@@ -450,6 +487,16 @@ pub struct EnvironmentMap {
     #[serde(rename = 0x2, default, skip_serializing_if = Option::is_none)]
     group: Option<TypeChoice>,
 }
+}
+
+impl EnvironmentMap {
+    fn with_vendor(vendor: String) -> Self {
+        EnvironmentMap {
+            class: Some(ClassMap::with_vendor(vendor)),
+            instance: None,
+            group: None,
+        }
+    }
 }
 
 // 5.1.4.2.  Reference Values Triple
@@ -514,7 +561,15 @@ pub struct MeasurementMap {
     #[serde(rename = 0x1)]
     mval: MeasurementValuesMap,
 }
+}
 
+impl MeasurementMap {
+    fn new(mkey: String, alg: usize, val: Vec<u8>) -> Self {
+        MeasurementMap {
+            mkey: Some(TypeChoice::Text(mkey)),
+            mval: MeasurementValuesMap::new_digest(alg, val),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -573,6 +628,15 @@ pub struct TagIdentityMap {
 }
 }
 
+impl TagIdentityMap {
+    fn new(id_map: String) -> Self {
+        TagIdentityMap {
+            id: IdType::Id(id_map),
+            version: None,
+        }
+    }
+}
+
 // 5.1.3.  LinkedTag
 serde_workaround! {
 #[derive(Debug, Clone)]
@@ -599,6 +663,18 @@ pub struct Comid {
     #[serde(rename = 0x4)]
     triples: Triple,
 }
+}
+
+impl Comid {
+    fn new(tag_identity: String, triple: Triple) -> Self {
+        Comid {
+            language: None,
+            tag_identity: TagIdentityMap::new(tag_identity),
+            entities: None,
+            linked_tags: None,
+            triples: triple,
+        }
+    }
 }
 
 const COMID_TAG: u64 = 506;
@@ -733,7 +809,7 @@ pub struct Corim {
     #[serde(rename = 0x1)]
     tags: WrappedComid,
     #[serde(rename = 0x2, default, skip_serializing_if = Vec::is_empty)]
-    depenent_rims: Vec<Locator>,
+    dependent_rims: Vec<Locator>,
     #[serde(rename = 0x3, default, skip_serializing_if = Option::is_none)]
     profile: Option<String>,
     #[serde(rename = 0x4, default, skip_serializing_if = Option::is_none)]
@@ -741,6 +817,79 @@ pub struct Corim {
     #[serde(rename = 0x5, default, skip_serializing_if = Vec::is_empty)]
     corim_entities: Vec<EntityMap>,
 }
+}
+
+impl Corim {
+    fn new(id: String, tags: Comid) -> Self {
+        Corim {
+            id,
+            tags: WrappedComid {
+                wrapped: vec![tags],
+            },
+            dependent_rims: vec![],
+            profile: None,
+            validity: None,
+            corim_entities: vec![],
+        }
+    }
+}
+
+// Internal structure used with `CorimBuilder`
+struct MeasurementEntry {
+    //digest: Digest,
+    alg: usize,
+    val: Vec<u8>,
+    mkey: String,
+}
+
+pub struct CorimBuilder {
+    hashes: Vec<MeasurementEntry>,
+    vendor: Option<String>,
+    tag_id: Option<String>,
+}
+
+impl CorimBuilder {
+    pub fn new() -> Self {
+        CorimBuilder {
+            hashes: Vec::new(),
+            vendor: None,
+            tag_id: None,
+        }
+    }
+
+    pub fn add_hash(&mut self, mkey: String, alg: usize, val: Vec<u8>) {
+        self.hashes.push(MeasurementEntry { mkey, alg, val });
+    }
+
+    pub fn vendor(&mut self, vendor: String) {
+        self.vendor = Some(vendor);
+    }
+
+    pub fn tag_id(&mut self, tag_id: String) {
+        self.tag_id = Some(tag_id);
+    }
+
+    pub fn build(self) -> Corim {
+        let maps = self
+            .hashes
+            .into_iter()
+            .map(|entry| MeasurementMap::new(entry.mkey, entry.alg, entry.val))
+            .collect();
+        let record = ReferenceTripleRecord {
+            ref_env: EnvironmentMap::with_vendor(self.vendor.unwrap()),
+            ref_claims: maps,
+        };
+
+        let triple = Triple {
+            reference_triple: vec![WrappedReferenceTripleRecord {
+                wrapped: vec![record],
+            }],
+            endorsed_triple: vec![],
+        };
+        let comid = Comid::new(self.tag_id.unwrap(), triple);
+
+        Corim::new("FIXME".to_string(), comid)
+    }
 }
 
 // 4.2.2.1.  Signer Map
