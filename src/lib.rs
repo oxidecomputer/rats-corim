@@ -25,6 +25,15 @@ pub enum TaggedBytes {
     Bytes(Vec<u8>),
 }
 
+impl std::fmt::Display for TaggedBytes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TaggedBytes::Tagged(t, v) => write!(f, "{};{}", t, hex::encode(&v)),
+            TaggedBytes::Bytes(b) => write!(f, "{}", hex::encode(&b)),
+        }
+    }
+}
+
 impl From<TaggedBytes> for Value {
     fn from(val: TaggedBytes) -> Self {
         match val {
@@ -70,6 +79,17 @@ const UUID_TAG: u64 = 37;
 
 // Section 7.6
 const OID_TAG: u64 = 111;
+
+impl std::fmt::Display for TypeChoice {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TypeChoice::UInt(u) => write!(f, "int;{}", u),
+            TypeChoice::Text(s) => write!(f, "text;{}", s),
+            TypeChoice::Uuid(u) => write!(f, "uuid;{}", hex::encode(&u)),
+            TypeChoice::Oid(o) => write!(f, "oid;{}", hex::encode(&o)),
+        }
+    }
+}
 
 impl From<TypeChoice> for Value {
     fn from(val: TypeChoice) -> Self {
@@ -196,6 +216,20 @@ pub struct Digest {
 #[serde(try_from = "Vec<Value>", into = "Value")]
 pub struct WrappedDigests {
     wrapped: Vec<Digest>,
+}
+
+impl std::fmt::Display for WrappedDigests {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for d in &self.wrapped {
+            match &d.val {
+                TaggedBytes::Bytes(b) => {
+                    write!(f, "{};{}", d.alg, hex::encode(&b))?;
+                }
+                _ => (),
+            }
+        }
+        Ok(())
+    }
 }
 
 impl From<WrappedDigests> for Value {
@@ -409,6 +443,18 @@ pub struct MeasurementValuesMap {
 }
 }
 
+impl std::fmt::Display for MeasurementValuesMap {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Add more fields later
+        if let Some(digests) = &self.digests {
+            for d in digests {
+                write!(f, "{}", d)?;
+            }
+        }
+        Ok(())
+    }
+}
+
 impl MeasurementValuesMap {
     fn new_digest(alg: usize, val: Vec<u8>) -> Self {
         MeasurementValuesMap {
@@ -447,6 +493,16 @@ pub struct Triple {
 }
 }
 
+impl std::fmt::Display for Triple {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // yeah add more later
+        for r in &self.reference_triple {
+            write!(f, "{}", r)?;
+        }
+        Ok(())
+    }
+}
+
 // 5.1.4.1.1.  Environment Class
 serde_workaround! {
 #[derive(Debug, Clone)]
@@ -462,6 +518,15 @@ pub struct ClassMap {
     #[serde(rename = 0x4, default, skip_serializing_if = Option::is_none)]
     index: Option<usize>,
 }
+}
+
+impl std::fmt::Display for ClassMap {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(vendor) = &self.vendor {
+            write!(f, "{}", vendor)?;
+        }
+        Ok(())
+    }
 }
 
 impl ClassMap {
@@ -489,6 +554,15 @@ pub struct EnvironmentMap {
 }
 }
 
+impl std::fmt::Display for EnvironmentMap {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(class) = &self.class {
+            write!(f, "{}", class)?;
+        }
+        Ok(())
+    }
+}
+
 impl EnvironmentMap {
     fn with_vendor(vendor: String) -> Self {
         EnvironmentMap {
@@ -506,10 +580,30 @@ pub struct ReferenceTripleRecord {
     ref_claims: Vec<MeasurementMap>,
 }
 
+impl std::fmt::Display for ReferenceTripleRecord {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Env: {}", self.ref_env)?;
+        writeln!(f, "claims:")?;
+        for c in &self.ref_claims {
+            writeln!(f, "  {}", c)?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(try_from = "Vec<Value>", into = "Value")]
 pub struct WrappedReferenceTripleRecord {
     wrapped: Vec<ReferenceTripleRecord>,
+}
+
+impl std::fmt::Display for WrappedReferenceTripleRecord {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for r in &self.wrapped {
+            write!(f, "{}", r)?;
+        }
+        Ok(())
+    }
 }
 
 impl From<WrappedReferenceTripleRecord> for Value {
@@ -563,6 +657,16 @@ pub struct MeasurementMap {
 }
 }
 
+impl std::fmt::Display for MeasurementMap {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        if let Some(mkey) = &self.mkey {
+            write!(f, "{} => ", mkey)?;
+        }
+        write!(f, "{}", self.mval)?;
+        Ok(())
+    }
+}
+
 impl MeasurementMap {
     fn new(mkey: String, alg: usize, val: Vec<u8>) -> Self {
         MeasurementMap {
@@ -577,6 +681,15 @@ impl MeasurementMap {
 enum IdType {
     Id(String),
     Bytes(Vec<u8>),
+}
+
+impl std::fmt::Display for IdType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            IdType::Id(s) => write!(f, "{}", s),
+            IdType::Bytes(b) => write!(f, "{}", hex::encode(&b)),
+        }
+    }
 }
 
 impl From<IdType> for Value {
@@ -628,6 +741,12 @@ pub struct TagIdentityMap {
 }
 }
 
+impl std::fmt::Display for TagIdentityMap {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.id)
+    }
+}
+
 impl TagIdentityMap {
     fn new(id_map: String) -> Self {
         TagIdentityMap {
@@ -665,6 +784,14 @@ pub struct Comid {
 }
 }
 
+impl std::fmt::Display for Comid {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        writeln!(f, "tag-identity: {}", self.tag_identity.id)?;
+        writeln!(f, "triples: {{ {} }}", self.triples)?;
+        Ok(())
+    }
+}
+
 impl Comid {
     fn new(tag_identity: String, triple: Triple) -> Self {
         Comid {
@@ -683,6 +810,15 @@ const COMID_TAG: u64 = 506;
 #[serde(try_from = "Value", into = "Value")]
 pub struct WrappedComid {
     wrapped: Vec<Comid>,
+}
+
+impl std::fmt::Display for WrappedComid {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        for c in &self.wrapped {
+            write!(f, "{}", c)?;
+        }
+        Ok(())
+    }
 }
 
 impl From<WrappedComid> for Value {
@@ -817,6 +953,16 @@ pub struct Corim {
     #[serde(rename = 0x5, default, skip_serializing_if = Vec::is_empty)]
     corim_entities: Vec<EntityMap>,
 }
+}
+
+impl std::fmt::Display for Corim {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        writeln!(f, "Corim {{")?;
+        writeln!(f, "id: {}", self.id)?;
+        writeln!(f, "{}", self.tags)?;
+        writeln!(f, "}}")?;
+        Ok(())
+    }
 }
 
 impl Corim {

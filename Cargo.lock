@@ -206,6 +206,7 @@ dependencies = [
  "ciborium",
  "ciborium-io",
  "clap",
+ "hex",
  "serde",
  "serde_with",
  "strum",
