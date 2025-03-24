@@ -978,6 +978,25 @@ impl Corim {
             corim_entities: vec![],
         }
     }
+
+    pub fn iter_measurements(&self) -> impl Iterator<Item = Vec<u8>> {
+        let comid = self.tags.wrapped.clone().into_iter();
+        let reference_triple = comid.flat_map(|x| x.triples.reference_triple.into_iter());
+        let reference_triple = reference_triple.flat_map(|x| x.wrapped.into_iter());
+        let claims = reference_triple.flat_map(|x| x.ref_claims.into_iter());
+        let digests = claims.flat_map(|x| {
+            if let Some(v) = x.mval.digests {
+                v.into_iter()
+            } else {
+                vec![].into_iter()
+            }
+        });
+        let digests = digests.flat_map(|x| x.wrapped.into_iter());
+        digests.into_iter().map(|x| match x.val {
+            TaggedBytes::Bytes(v) => v,
+            _ => unreachable!(),
+        })
+    }
 }
 
 // Internal structure used with `CorimBuilder`
