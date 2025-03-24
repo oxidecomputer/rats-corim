@@ -16,6 +16,8 @@ pub enum Error {
     Deserialize(String),
     #[error("Tag {0} did not match")]
     IncorrectTag(u64),
+    #[error("Io {0}")]
+    Io(std::io::Error),
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -977,6 +979,12 @@ impl Corim {
             validity: None,
             corim_entities: vec![],
         }
+    }
+
+    pub fn from_file(path: std::path::PathBuf) -> Result<Self, Error> {
+        let bytes = std::fs::read(&path).map_err(Error::Io)?;
+        ciborium::from_reader(&bytes[..])
+            .map_err(|e| Error::Deserialize(format!("from file {:?}", e)))
     }
 
     pub fn iter_measurements(&self) -> impl Iterator<Item = Vec<u8>> {
