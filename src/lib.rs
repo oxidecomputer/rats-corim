@@ -987,6 +987,12 @@ impl Corim {
             .map_err(|e| Error::Deserialize(format!("from file {:?}", e)))
     }
 
+    pub fn to_vec(&self) -> Result<Vec<u8>, Error> {
+        let mut bytes = Vec::new();
+        ciborium::into_writer(&self, &mut bytes).map_err(|e| Error::Deserialize(format!("into bytes {:?}", e)))?;
+        Ok(bytes)
+    }
+
     pub fn iter_measurements(&self) -> impl Iterator<Item = Vec<u8>> {
         let comid = self.tags.wrapped.clone().into_iter();
         let reference_triple = comid.flat_map(|x| x.triples.reference_triple.into_iter());
