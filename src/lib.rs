@@ -18,6 +18,8 @@ pub enum Error {
     IncorrectTag(u64),
     #[error("Io {0}")]
     Io(std::io::Error),
+    #[error("Missing required field {0}")]
+    MissingField(String),
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -989,7 +991,8 @@ impl Corim {
 
     pub fn to_vec(&self) -> Result<Vec<u8>, Error> {
         let mut bytes = Vec::new();
-        ciborium::into_writer(&self, &mut bytes).map_err(|e| Error::Deserialize(format!("into bytes {:?}", e)))?;
+        ciborium::into_writer(&self, &mut bytes)
+            .map_err(|e| Error::Deserialize(format!("into bytes {:?}", e)))?;
         Ok(bytes)
     }
 
@@ -1015,7 +1018,6 @@ impl Corim {
 
 // Internal structure used with `CorimBuilder`
 struct MeasurementEntry {
-    //digest: Digest,
     alg: usize,
     val: Vec<u8>,
     mkey: String,
@@ -1025,6 +1027,7 @@ pub struct CorimBuilder {
     hashes: Vec<MeasurementEntry>,
     vendor: Option<String>,
     tag_id: Option<String>,
+    id: Option<String>,
 }
 
 impl CorimBuilder {
@@ -1033,6 +1036,7 @@ impl CorimBuilder {
             hashes: Vec::new(),
             vendor: None,
             tag_id: None,
+            id: None,
         }
     }
 
@@ -1048,14 +1052,21 @@ impl CorimBuilder {
         self.tag_id = Some(tag_id);
     }
 
-    pub fn build(self) -> Corim {
+    pub fn id(&mut self, id: String) {
+        self.id = Some(id);
+    }
+
+    pub fn build(self) -> Result<Corim, Error> {
         let maps = self
             .hashes
             .into_iter()
             .map(|entry| MeasurementMap::new(entry.mkey, entry.alg, entry.val))
             .collect();
         let record = ReferenceTripleRecord {
-            ref_env: EnvironmentMap::with_vendor(self.vendor.unwrap()),
+            ref_env: EnvironmentMap::with_vendor(
+                self.vendor
+                    .ok_or(Error::MissingField("vendor".to_string()))?,
+            ),
             ref_claims: maps,
         };
 
@@ -1065,10 +1076,36 @@ impl CorimBuilder {
             }],
             endorsed_triple: vec![],
         };
-        let comid = Comid::new(self.tag_id.unwrap(), triple);
+        let comid = Comid::new(
+            self.tag_id
+                .ok_or(Error::MissingField("tag_id".to_string()))?,
+            triple,
+        );
 
-        Corim::new("FIXME".to_string(), comid)
+        Ok(Corim::new(
+            self.id.ok_or(Error::MissingField("id".to_string()))?,
+            comid,
+        ))
     }
+}
+#[test]
+fn corim_builder_tests() {
+    let builder = CorimBuilder::new();
+
+    let result = builder.build();
+
+    assert!(result.is_err());
+
+    let mut builder = CorimBuilder::new();
+
+    builder.vendor("foo".to_string());
+    builder.id("baz".to_string());
+    builder.tag_id("quux".to_string());
+    builder.add_hash("layer1".to_string(), 10, vec![0; 32]);
+
+    let result = builder.build();
+
+    assert!(result.is_ok());
 }
 
 // 4.2.2.1.  Signer Map
