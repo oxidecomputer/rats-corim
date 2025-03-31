@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 ///
 /// Borrowed from https://github.com/1Password/passkey-rs/blob/9e34d025f3d302fd9b0fc1b361e19fc78e594a4c/passkey-types/src/utils/serde_workaround.rs
 ///
