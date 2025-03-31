@@ -9,7 +9,6 @@ enum Command {
     PrintComid { path: PathBuf },
     PrintCorim { path: PathBuf },
     PrintSignedCorim { path: PathBuf },
-    RoundTrip { path: PathBuf },
 }
 
 #[derive(Debug, Parser)]
@@ -30,12 +29,12 @@ fn main() {
         Command::PrintComid { path } => {
             let b = std::fs::read(path).unwrap();
             let s: Comid = ciborium::from_reader(&b[..]).unwrap();
-            println!("{:?}", s);
+            println!("{}", s);
         }
         Command::PrintCorim { path } => {
             let b = std::fs::read(path).unwrap();
             let s: Corim = ciborium::from_reader(&b[..]).unwrap();
-            println!("{:?}", s);
+            println!("{}", s);
         }
         Command::PrintSignedCorim { path } => {
             let b = std::fs::read(path).unwrap();

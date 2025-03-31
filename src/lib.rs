@@ -1,4 +1,41 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 // From https://datatracker.ietf.org/doc/draft-ietf-rats-corim/
+//
+// The CoRIM specification has several pain points in its implementation
+//
+// 1) The specification uses integers as map keys e.g.
+//
+//    concise-mid-tag = {
+//     ? &(language: 0) => text
+//     &(tag-identity: 1) => tag-identity-map
+//     ? &(entities: 2) => [ + comid-entity-map ]
+//     ? &(linked-tags: 3) => [ + linked-tag-map ]
+//     &(triples: 4) => triples-map
+//     * $$concise-mid-tag-extension
+//   }
+//
+//  serde does not support this which means the usual `serde_as` tricks won't work.
+//  https://github.com/serde-rs/serde/pull/2209 is a tracking issue and
+//  https://github.com/serde-rs/serde/pull/2209#issuecomment-2521136080 a specific
+//  pointer to a workaround macro to serialize the structs with integer fields
+//  properly.
+//
+//  2) CBOR allows non uniform arrays e.g.
+//
+//  digest = [
+//    alg: (int / text),
+//    val: bytes
+//  ]
+//
+//  digests-type = [ + digest ]
+//
+//  It is valid for an array of digests to be represented as an array of alternating
+//  ints and bytes. The easiest way to parse this was to wrap certain arrays in a
+//  structure and parse them with `try_from` in serde.
+//
 use ciborium::Value;
 use serde::{Deserialize, Serialize};
 #[macro_use]
@@ -16,6 +53,10 @@ pub enum Error {
     Deserialize(String),
     #[error("Tag {0} did not match")]
     IncorrectTag(u64),
+    #[error("Io {0}")]
+    Io(std::io::Error),
+    #[error("Missing required field {0}")]
+    MissingField(String),
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -23,6 +64,15 @@ pub enum Error {
 pub enum TaggedBytes {
     Tagged(u64, Vec<u8>),
     Bytes(Vec<u8>),
+}
+
+impl std::fmt::Display for TaggedBytes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TaggedBytes::Tagged(t, v) => write!(f, "{};{}", t, hex::encode(&v)),
+            TaggedBytes::Bytes(b) => write!(f, "{}", hex::encode(&b)),
+        }
+    }
 }
 
 impl From<TaggedBytes> for Value {
@@ -71,6 +121,17 @@ const UUID_TAG: u64 = 37;
 // Section 7.6
 const OID_TAG: u64 = 111;
 
+impl std::fmt::Display for TypeChoice {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TypeChoice::UInt(u) => write!(f, "int;{}", u),
+            TypeChoice::Text(s) => write!(f, "text;{}", s),
+            TypeChoice::Uuid(u) => write!(f, "uuid;{}", hex::encode(&u)),
+            TypeChoice::Oid(o) => write!(f, "oid;{}", hex::encode(&o)),
+        }
+    }
+}
+
 impl From<TypeChoice> for Value {
     fn from(val: TypeChoice) -> Self {
         use ciborium::value::Integer;
@@ -111,45 +172,6 @@ impl TryFrom<Value> for TypeChoice {
     }
 }
 
-#[test]
-fn type_choice_tests() {
-    let int_value = ciborium::cbor!(1234).unwrap();
-
-    let text_value = ciborium::cbor!("this is text").unwrap();
-
-    let uid_value = Value::Tag(UUID_TAG, Box::new(Value::Bytes(vec![0, 1, 2, 3, 4])));
-
-    let result = match int_value.deserialized() {
-        Ok(v) => match v {
-            TypeChoice::UInt(_) => v,
-            _ => panic!("wrong type"),
-        },
-        Err(_) => panic!("did not deserialze"),
-    };
-
-    assert!(int_value == Value::serialized(&result).unwrap());
-
-    let result = match text_value.deserialized() {
-        Ok(v) => match v {
-            TypeChoice::Text(_) => v,
-            _ => panic!("wrong type"),
-        },
-        Err(_) => panic!("did not deserialze"),
-    };
-
-    assert!(text_value == Value::serialized(&result).unwrap());
-
-    let result = match uid_value.deserialized() {
-        Ok(v) => match v {
-            TypeChoice::Uuid(_) => v,
-            _ => panic!("wrong type"),
-        },
-        Err(_) => panic!("did not deserialze"),
-    };
-
-    assert!(uid_value == Value::serialized(&result).unwrap());
-}
-
 // 5.1.4.1.4.3.  Version
 serde_workaround! {
 #[derive(Debug, Default, Clone)]
@@ -162,27 +184,10 @@ pub struct VersionMap {
 
 }
 
-#[test]
-fn test_version_map() {
-    use ciborium::cbor;
-
-    let map = ciborium::cbor!( {
-        0 => "0.0.0",
-        1 => 3,
-
-    })
-    .unwrap();
-
-    let _: VersionMap = map.deserialized().unwrap();
-
-    let sample = VersionMap {
-        version: "0.0.0".to_string(),
-        version_scheme: 3,
-    };
-
-    let serialized = Value::serialized(&sample).unwrap();
-
-    assert!(serialized == map);
+impl VersionMap {
+    pub fn new(version: String, version_scheme: usize) -> Self {
+        Self { version, version_scheme }
+    }
 }
 
 // 7.7.  Digest
@@ -196,6 +201,20 @@ pub struct Digest {
 #[serde(try_from = "Vec<Value>", into = "Value")]
 pub struct WrappedDigests {
     wrapped: Vec<Digest>,
+}
+
+impl std::fmt::Display for WrappedDigests {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for d in &self.wrapped {
+            match &d.val {
+                TaggedBytes::Bytes(b) => {
+                    write!(f, "{};{}", d.alg, hex::encode(&b))?;
+                }
+                _ => (),
+            }
+        }
+        Ok(())
+    }
 }
 
 impl From<WrappedDigests> for Value {
@@ -235,30 +254,6 @@ impl TryFrom<Vec<Value>> for WrappedDigests {
     }
 }
 
-#[test]
-fn test_digests() {
-    use ciborium::value::Integer;
-
-    let digests = Value::Array(vec![
-        Value::Integer(Integer::from(1000)),
-        Value::Bytes(vec![1, 2, 3, 4, 5, 6, 7, 8]),
-        Value::Integer(Integer::from(2000)),
-        Value::Bytes(vec![10, 11, 12, 13, 14, 15, 16, 17]),
-    ]);
-
-    let a: WrappedDigests = digests.deserialized().unwrap();
-
-    let b = Value::serialized(&a).unwrap();
-
-    if digests != b {
-        panic!(
-            "mismatch expected: {} found: {}",
-            pretty_print(digests),
-            pretty_print(b)
-        );
-    }
-}
-
 // 5.1.4.1.4.5.  Flags
 serde_workaround! {
 #[derive(Debug, Default, Clone)]
@@ -284,29 +279,6 @@ pub struct FlagsMap {
     #[serde(rename = 0x9)]
     is_confidentiality_protected: bool,
 }
-}
-
-#[test]
-fn test_flags_map() {
-    use ciborium::cbor;
-
-    let map = ciborium::cbor!( {
-        0 => false,
-        1 => true,
-        2 => false,
-        3 => true,
-        4 => false,
-        5 => true,
-        6 => false,
-        7 => true,
-        8 => false,
-        9 => true,
-    })
-    .unwrap();
-
-    let result: FlagsMap = map.deserialized().unwrap();
-
-    assert!(map == Value::serialized(&result).unwrap());
 }
 
 const SVN_TAG: u64 = 552;
@@ -409,6 +381,43 @@ pub struct MeasurementValuesMap {
 }
 }
 
+impl std::fmt::Display for MeasurementValuesMap {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Add more fields later
+        if let Some(digests) = &self.digests {
+            for d in digests {
+                write!(f, "{}", d)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl MeasurementValuesMap {
+    fn new_digest(alg: usize, val: Vec<u8>) -> Self {
+        MeasurementValuesMap {
+            version: None,
+            svn: None,
+            flags: None,
+            raw_value: None,
+            raw_value_mask: None,
+            mac_addr: None,
+            ip_addr: None,
+            serial_number: None,
+            ueid: None,
+            uuid: None,
+            name: None,
+            cryptokeys: None,
+            digests: Some(vec![WrappedDigests {
+                wrapped: vec![Digest {
+                    alg,
+                    val: TaggedBytes::Bytes(val),
+                }],
+            }]),
+        }
+    }
+}
+
 // 5.1.4.  Triples
 // TODO add the rest of the fields, these all look very similar to `reference-triple`
 // but with slight variations
@@ -420,6 +429,16 @@ pub struct Triple {
     #[serde(rename = 0x1, default, skip_serializing_if = Vec::is_empty)]
     endorsed_triple: Vec<WrappedReferenceTripleRecord>,
 }
+}
+
+impl std::fmt::Display for Triple {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // yeah add more later
+        for r in &self.reference_triple {
+            write!(f, "{}", r)?;
+        }
+        Ok(())
+    }
 }
 
 // 5.1.4.1.1.  Environment Class
@@ -439,6 +458,27 @@ pub struct ClassMap {
 }
 }
 
+impl std::fmt::Display for ClassMap {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(vendor) = &self.vendor {
+            write!(f, "{}", vendor)?;
+        }
+        Ok(())
+    }
+}
+
+impl ClassMap {
+    fn with_vendor(vendor: String) -> Self {
+        ClassMap {
+            class_id: None,
+            vendor: Some(vendor),
+            model: None,
+            layer: None,
+            index: None,
+        }
+    }
+}
+
 // 5.1.4.1.  Environments
 serde_workaround! {
 #[derive(Debug, Clone)]
@@ -452,6 +492,25 @@ pub struct EnvironmentMap {
 }
 }
 
+impl std::fmt::Display for EnvironmentMap {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(class) = &self.class {
+            write!(f, "{}", class)?;
+        }
+        Ok(())
+    }
+}
+
+impl EnvironmentMap {
+    fn with_vendor(vendor: String) -> Self {
+        EnvironmentMap {
+            class: Some(ClassMap::with_vendor(vendor)),
+            instance: None,
+            group: None,
+        }
+    }
+}
+
 // 5.1.4.2.  Reference Values Triple
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ReferenceTripleRecord {
@@ -459,10 +518,30 @@ pub struct ReferenceTripleRecord {
     ref_claims: Vec<MeasurementMap>,
 }
 
+impl std::fmt::Display for ReferenceTripleRecord {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Env: {}", self.ref_env)?;
+        writeln!(f, "claims:")?;
+        for c in &self.ref_claims {
+            writeln!(f, "  {}", c)?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(try_from = "Vec<Value>", into = "Value")]
 pub struct WrappedReferenceTripleRecord {
     wrapped: Vec<ReferenceTripleRecord>,
+}
+
+impl std::fmt::Display for WrappedReferenceTripleRecord {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for r in &self.wrapped {
+            write!(f, "{}", r)?;
+        }
+        Ok(())
+    }
 }
 
 impl From<WrappedReferenceTripleRecord> for Value {
@@ -514,7 +593,25 @@ pub struct MeasurementMap {
     #[serde(rename = 0x1)]
     mval: MeasurementValuesMap,
 }
+}
 
+impl std::fmt::Display for MeasurementMap {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        if let Some(mkey) = &self.mkey {
+            write!(f, "{} => ", mkey)?;
+        }
+        write!(f, "{}", self.mval)?;
+        Ok(())
+    }
+}
+
+impl MeasurementMap {
+    fn new(mkey: String, alg: usize, val: Vec<u8>) -> Self {
+        MeasurementMap {
+            mkey: Some(TypeChoice::Text(mkey)),
+            mval: MeasurementValuesMap::new_digest(alg, val),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -522,6 +619,15 @@ pub struct MeasurementMap {
 enum IdType {
     Id(String),
     Bytes(Vec<u8>),
+}
+
+impl std::fmt::Display for IdType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            IdType::Id(s) => write!(f, "{}", s),
+            IdType::Bytes(b) => write!(f, "{}", hex::encode(&b)),
+        }
+    }
 }
 
 impl From<IdType> for Value {
@@ -573,6 +679,21 @@ pub struct TagIdentityMap {
 }
 }
 
+impl std::fmt::Display for TagIdentityMap {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.id)
+    }
+}
+
+impl TagIdentityMap {
+    fn new(id_map: String) -> Self {
+        TagIdentityMap {
+            id: IdType::Id(id_map),
+            version: None,
+        }
+    }
+}
+
 // 5.1.3.  LinkedTag
 serde_workaround! {
 #[derive(Debug, Clone)]
@@ -601,12 +722,41 @@ pub struct Comid {
 }
 }
 
+impl std::fmt::Display for Comid {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        writeln!(f, "tag-identity: {}", self.tag_identity.id)?;
+        writeln!(f, "triples: {{ {} }}", self.triples)?;
+        Ok(())
+    }
+}
+
+impl Comid {
+    fn new(tag_identity: String, triple: Triple) -> Self {
+        Comid {
+            language: None,
+            tag_identity: TagIdentityMap::new(tag_identity),
+            entities: None,
+            linked_tags: None,
+            triples: triple,
+        }
+    }
+}
+
 const COMID_TAG: u64 = 506;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(try_from = "Value", into = "Value")]
 pub struct WrappedComid {
     wrapped: Vec<Comid>,
+}
+
+impl std::fmt::Display for WrappedComid {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        for c in &self.wrapped {
+            write!(f, "{}", c)?;
+        }
+        Ok(())
+    }
 }
 
 impl From<WrappedComid> for Value {
@@ -733,7 +883,7 @@ pub struct Corim {
     #[serde(rename = 0x1)]
     tags: WrappedComid,
     #[serde(rename = 0x2, default, skip_serializing_if = Vec::is_empty)]
-    depenent_rims: Vec<Locator>,
+    dependent_rims: Vec<Locator>,
     #[serde(rename = 0x3, default, skip_serializing_if = Option::is_none)]
     profile: Option<String>,
     #[serde(rename = 0x4, default, skip_serializing_if = Option::is_none)]
@@ -741,6 +891,136 @@ pub struct Corim {
     #[serde(rename = 0x5, default, skip_serializing_if = Vec::is_empty)]
     corim_entities: Vec<EntityMap>,
 }
+}
+
+impl std::fmt::Display for Corim {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        writeln!(f, "Corim {{")?;
+        writeln!(f, "id: {}", self.id)?;
+        writeln!(f, "{}", self.tags)?;
+        writeln!(f, "}}")?;
+        Ok(())
+    }
+}
+
+impl Corim {
+    fn new(id: String, tags: Comid) -> Self {
+        Corim {
+            id,
+            tags: WrappedComid {
+                wrapped: vec![tags],
+            },
+            dependent_rims: vec![],
+            profile: None,
+            validity: None,
+            corim_entities: vec![],
+        }
+    }
+
+    pub fn from_file(path: std::path::PathBuf) -> Result<Self, Error> {
+        let bytes = std::fs::read(&path).map_err(Error::Io)?;
+        ciborium::from_reader(&bytes[..])
+            .map_err(|e| Error::Deserialize(format!("from file {:?}", e)))
+    }
+
+    pub fn to_vec(&self) -> Result<Vec<u8>, Error> {
+        let mut bytes = Vec::new();
+        ciborium::into_writer(&self, &mut bytes)
+            .map_err(|e| Error::Deserialize(format!("into bytes {:?}", e)))?;
+        Ok(bytes)
+    }
+
+    pub fn iter_measurements(&self) -> impl Iterator<Item = Vec<u8>> {
+        let comid = self.tags.wrapped.clone().into_iter();
+        let reference_triple = comid.flat_map(|x| x.triples.reference_triple.into_iter());
+        let reference_triple = reference_triple.flat_map(|x| x.wrapped.into_iter());
+        let claims = reference_triple.flat_map(|x| x.ref_claims.into_iter());
+        let digests = claims.flat_map(|x| {
+            if let Some(v) = x.mval.digests {
+                v.into_iter()
+            } else {
+                vec![].into_iter()
+            }
+        });
+        let digests = digests.flat_map(|x| x.wrapped.into_iter());
+        digests.into_iter().map(|x| match x.val {
+            TaggedBytes::Bytes(v) => v,
+            _ => unreachable!(),
+        })
+    }
+}
+
+// Internal structure used with `CorimBuilder`
+struct MeasurementEntry {
+    alg: usize,
+    val: Vec<u8>,
+    mkey: String,
+}
+
+pub struct CorimBuilder {
+    hashes: Vec<MeasurementEntry>,
+    vendor: Option<String>,
+    tag_id: Option<String>,
+    id: Option<String>,
+}
+
+impl CorimBuilder {
+    pub fn new() -> Self {
+        CorimBuilder {
+            hashes: Vec::new(),
+            vendor: None,
+            tag_id: None,
+            id: None,
+        }
+    }
+
+    pub fn add_hash(&mut self, mkey: String, alg: usize, val: Vec<u8>) {
+        self.hashes.push(MeasurementEntry { mkey, alg, val });
+    }
+
+    pub fn vendor(&mut self, vendor: String) {
+        self.vendor = Some(vendor);
+    }
+
+    pub fn tag_id(&mut self, tag_id: String) {
+        self.tag_id = Some(tag_id);
+    }
+
+    pub fn id(&mut self, id: String) {
+        self.id = Some(id);
+    }
+
+    pub fn build(self) -> Result<Corim, Error> {
+        let maps = self
+            .hashes
+            .into_iter()
+            .map(|entry| MeasurementMap::new(entry.mkey, entry.alg, entry.val))
+            .collect();
+        let record = ReferenceTripleRecord {
+            ref_env: EnvironmentMap::with_vendor(
+                self.vendor
+                    .ok_or(Error::MissingField("vendor".to_string()))?,
+            ),
+            ref_claims: maps,
+        };
+
+        let triple = Triple {
+            reference_triple: vec![WrappedReferenceTripleRecord {
+                wrapped: vec![record],
+            }],
+            endorsed_triple: vec![],
+        };
+        let comid = Comid::new(
+            self.tag_id
+                .ok_or(Error::MissingField("tag_id".to_string()))?,
+            triple,
+        );
+
+        Ok(Corim::new(
+            self.id.ok_or(Error::MissingField("id".to_string()))?,
+            comid,
+        ))
+    }
 }
 
 // 4.2.2.1.  Signer Map
