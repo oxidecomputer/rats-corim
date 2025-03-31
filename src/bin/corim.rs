@@ -4,6 +4,7 @@ use corim_experiments::{pretty_print, Comid, Corim, SignedCorim};
 use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
+#[allow(clippy::enum_variant_names)]
 enum Command {
     PrintCbor { path: PathBuf },
     PrintComid { path: PathBuf },
