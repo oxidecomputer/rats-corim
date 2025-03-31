@@ -186,7 +186,10 @@ pub struct VersionMap {
 
 impl VersionMap {
     pub fn new(version: String, version_scheme: usize) -> Self {
-        Self { version, version_scheme }
+        Self {
+            version,
+            version_scheme,
+        }
     }
 }
 
