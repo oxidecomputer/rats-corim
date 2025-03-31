@@ -69,8 +69,8 @@ pub enum TaggedBytes {
 impl std::fmt::Display for TaggedBytes {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TaggedBytes::Tagged(t, v) => write!(f, "{};{}", t, hex::encode(&v)),
-            TaggedBytes::Bytes(b) => write!(f, "{}", hex::encode(&b)),
+            TaggedBytes::Tagged(t, v) => write!(f, "{};{}", t, hex::encode(v)),
+            TaggedBytes::Bytes(b) => write!(f, "{}", hex::encode(b)),
         }
     }
 }
@@ -126,8 +126,8 @@ impl std::fmt::Display for TypeChoice {
         match self {
             TypeChoice::UInt(u) => write!(f, "int;{}", u),
             TypeChoice::Text(s) => write!(f, "text;{}", s),
-            TypeChoice::Uuid(u) => write!(f, "uuid;{}", hex::encode(&u)),
-            TypeChoice::Oid(o) => write!(f, "oid;{}", hex::encode(&o)),
+            TypeChoice::Uuid(u) => write!(f, "uuid;{}", hex::encode(u)),
+            TypeChoice::Oid(o) => write!(f, "oid;{}", hex::encode(o)),
         }
     }
 }
@@ -209,11 +209,8 @@ pub struct WrappedDigests {
 impl std::fmt::Display for WrappedDigests {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for d in &self.wrapped {
-            match &d.val {
-                TaggedBytes::Bytes(b) => {
-                    write!(f, "{};{}", d.alg, hex::encode(&b))?;
-                }
-                _ => (),
+            if let TaggedBytes::Bytes(b) = &d.val {
+                write!(f, "{};{}", d.alg, hex::encode(b))?;
             }
         }
         Ok(())
@@ -628,7 +625,7 @@ impl std::fmt::Display for IdType {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             IdType::Id(s) => write!(f, "{}", s),
-            IdType::Bytes(b) => write!(f, "{}", hex::encode(&b)),
+            IdType::Bytes(b) => write!(f, "{}", hex::encode(b)),
         }
     }
 }
@@ -965,6 +962,12 @@ pub struct CorimBuilder {
     vendor: Option<String>,
     tag_id: Option<String>,
     id: Option<String>,
+}
+
+impl Default for CorimBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl CorimBuilder {
