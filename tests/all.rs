@@ -3,12 +3,12 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use ciborium::Value;
-use corim_experiments::pretty_print;
-use corim_experiments::CorimBuilder;
-use corim_experiments::FlagsMap;
-use corim_experiments::TypeChoice;
-use corim_experiments::VersionMap;
-use corim_experiments::WrappedDigests;
+use rats_corim::pretty_print;
+use rats_corim::CorimBuilder;
+use rats_corim::FlagsMap;
+use rats_corim::TypeChoice;
+use rats_corim::VersionMap;
+use rats_corim::WrappedDigests;
 
 #[test]
 fn test_digests() {

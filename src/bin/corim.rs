@@ -4,7 +4,7 @@
 
 use ciborium::Value;
 use clap::Parser;
-use corim_experiments::{pretty_print, Comid, Corim, SignedCorim};
+use rats_corim::{pretty_print, Comid, Corim, SignedCorim};
 use std::path::PathBuf;
 
 #[derive(Parser, Debug)]

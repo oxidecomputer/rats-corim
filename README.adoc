@@ -4,4 +4,6 @@
 
 = RATS CoRIM
 
-This is an attempt at a Rust implementation of https://datatracker.ietf.org/doc/draft-ietf-rats-corim/[the draft CoRIM specification].
+This is an attempt at a Rust implementation of https://datatracker.ietf.org/doc/draft-ietf-rats-corim/[the draft CoRIM specification]. Parts of the specification are yet to be implemented. The parts that are present
+are designed to be used with Oxide software but should be usable elsewhere.
+
