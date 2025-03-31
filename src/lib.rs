@@ -3,6 +3,39 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 // From https://datatracker.ietf.org/doc/draft-ietf-rats-corim/
+//
+// The CoRIM specification has several pain points in its implementation
+//
+// 1) The specification uses integers as map keys e.g.
+//
+//    concise-mid-tag = {
+//     ? &(language: 0) => text
+//     &(tag-identity: 1) => tag-identity-map
+//     ? &(entities: 2) => [ + comid-entity-map ]
+//     ? &(linked-tags: 3) => [ + linked-tag-map ]
+//     &(triples: 4) => triples-map
+//     * $$concise-mid-tag-extension
+//   }
+//
+//  serde does not support this which means the usual `serde_as` tricks won't work.
+//  https://github.com/serde-rs/serde/pull/2209 is a tracking issue and
+//  https://github.com/serde-rs/serde/pull/2209#issuecomment-2521136080 a specific
+//  pointer to a workaround macro to serialize the structs with integer fields
+//  properly.
+//
+//  2) CBOR allows non uniform arrays e.g.
+//
+//  digest = [
+//    alg: (int / text),
+//    val: bytes
+//  ]
+//
+//  digests-type = [ + digest ]
+//
+//  It is valid for an array of digests to be represented as an array of alternating
+//  ints and bytes. The easiest way to parse this was to wrap certain arrays in a
+//  structure and parse them with `try_from` in serde.
+//
 use ciborium::Value;
 use serde::{Deserialize, Serialize};
 #[macro_use]
