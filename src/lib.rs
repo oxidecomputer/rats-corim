@@ -196,8 +196,8 @@ impl VersionMap {
 // 7.7.  Digest
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Digest {
-    alg: usize,
-    val: TaggedBytes,
+    pub alg: usize,
+    pub val: TaggedBytes,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -930,7 +930,7 @@ impl Corim {
         Ok(bytes)
     }
 
-    pub fn iter_measurements(&self) -> impl Iterator<Item = Vec<u8>> {
+    pub fn iter_digests(&self) -> impl Iterator<Item = Digest> {
         let comid = self.tags.wrapped.clone().into_iter();
         let reference_triple = comid.flat_map(|x| x.triples.reference_triple.into_iter());
         let reference_triple = reference_triple.flat_map(|x| x.wrapped.into_iter());
@@ -942,11 +942,7 @@ impl Corim {
                 vec![].into_iter()
             }
         });
-        let digests = digests.flat_map(|x| x.wrapped.into_iter());
-        digests.into_iter().map(|x| match x.val {
-            TaggedBytes::Bytes(v) => v,
-            _ => unreachable!(),
-        })
+        digests.flat_map(|x| x.wrapped.into_iter())
     }
 }
 
