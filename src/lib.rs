@@ -57,6 +57,10 @@ pub enum Error {
     Io(std::io::Error),
     #[error("Missing required field {0}")]
     MissingField(String),
+    #[error("Multiple CoMID in this CoRIM")]
+    MultipleComid,
+    #[error("Missing version from the CoMID")]
+    MissingVersion,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -686,10 +690,10 @@ impl std::fmt::Display for TagIdentityMap {
 }
 
 impl TagIdentityMap {
-    fn new(id_map: String) -> Self {
+    fn new(id_map: String, version: Option<String>) -> Self {
         TagIdentityMap {
             id: IdType::Id(id_map),
-            version: None,
+            version,
         }
     }
 }
@@ -731,10 +735,10 @@ impl std::fmt::Display for Comid {
 }
 
 impl Comid {
-    fn new(tag_identity: String, triple: Triple) -> Self {
+    fn new(tag_identity: String, triple: Triple, version: Option<String>) -> Self {
         Comid {
             language: None,
-            tag_identity: TagIdentityMap::new(tag_identity),
+            tag_identity: TagIdentityMap::new(tag_identity, version),
             entities: None,
             linked_tags: None,
             triples: triple,
@@ -879,7 +883,7 @@ serde_workaround! {
 #[derive(Debug, Clone)]
 pub struct Corim {
     #[serde(rename = 0x0)]
-    id: String,
+    pub id: String,
     #[serde(rename = 0x1)]
     tags: WrappedComid,
     #[serde(rename = 0x2, default, skip_serializing_if = Vec::is_empty)]
@@ -917,6 +921,10 @@ impl Corim {
         }
     }
 
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
+        ciborium::from_reader(bytes).map_err(|e| Error::Deserialize(format!("from bytes {e:?}")))
+    }
+
     pub fn from_file<P: AsRef<std::path::Path>>(path: P) -> Result<Self, Error> {
         let bytes = std::fs::read(&path).map_err(Error::Io)?;
         ciborium::from_reader(&bytes[..])
@@ -928,6 +936,19 @@ impl Corim {
         ciborium::into_writer(&self, &mut bytes)
             .map_err(|e| Error::Deserialize(format!("into bytes {e:?}")))?;
         Ok(bytes)
+    }
+
+    pub fn get_version(&self) -> Result<String, Error> {
+        // for now assume we have a single Comid
+        if self.tags.wrapped.len() != 1 {
+            return Err(Error::MultipleComid);
+        }
+
+        self.tags.wrapped[0]
+            .tag_identity
+            .version
+            .clone()
+            .ok_or(Error::MissingVersion)
     }
 
     pub fn iter_digests(&self) -> impl Iterator<Item = Digest> {
@@ -958,6 +979,7 @@ pub struct CorimBuilder {
     vendor: Option<String>,
     tag_id: Option<String>,
     id: Option<String>,
+    version: Option<String>,
 }
 
 impl Default for CorimBuilder {
@@ -973,6 +995,7 @@ impl CorimBuilder {
             vendor: None,
             tag_id: None,
             id: None,
+            version: None,
         }
     }
 
@@ -990,6 +1013,10 @@ impl CorimBuilder {
 
     pub fn id(&mut self, id: String) {
         self.id = Some(id);
+    }
+
+    pub fn version(&mut self, version: String) {
+        self.version = Some(version);
     }
 
     pub fn build(self) -> Result<Corim, Error> {
@@ -1016,6 +1043,7 @@ impl CorimBuilder {
             self.tag_id
                 .ok_or(Error::MissingField("tag_id".to_string()))?,
             triple,
+            self.version,
         );
 
         Ok(Corim::new(
