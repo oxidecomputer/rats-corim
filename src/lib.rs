@@ -124,8 +124,8 @@ const OID_TAG: u64 = 111;
 impl std::fmt::Display for TypeChoice {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TypeChoice::UInt(u) => write!(f, "int;{}", u),
-            TypeChoice::Text(s) => write!(f, "text;{}", s),
+            TypeChoice::UInt(u) => write!(f, "int;{u}"),
+            TypeChoice::Text(s) => write!(f, "text;{s}"),
             TypeChoice::Uuid(u) => write!(f, "uuid;{}", hex::encode(u)),
             TypeChoice::Oid(o) => write!(f, "oid;{}", hex::encode(o)),
         }
@@ -386,7 +386,7 @@ impl std::fmt::Display for MeasurementValuesMap {
         // Add more fields later
         if let Some(digests) = &self.digests {
             for d in digests {
-                write!(f, "{}", d)?;
+                write!(f, "{d}")?;
             }
         }
         Ok(())
@@ -435,7 +435,7 @@ impl std::fmt::Display for Triple {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // yeah add more later
         for r in &self.reference_triple {
-            write!(f, "{}", r)?;
+            write!(f, "{r}")?;
         }
         Ok(())
     }
@@ -461,7 +461,7 @@ pub struct ClassMap {
 impl std::fmt::Display for ClassMap {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(vendor) = &self.vendor {
-            write!(f, "{}", vendor)?;
+            write!(f, "{vendor}")?;
         }
         Ok(())
     }
@@ -495,7 +495,7 @@ pub struct EnvironmentMap {
 impl std::fmt::Display for EnvironmentMap {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(class) = &self.class {
-            write!(f, "{}", class)?;
+            write!(f, "{class}")?;
         }
         Ok(())
     }
@@ -523,7 +523,7 @@ impl std::fmt::Display for ReferenceTripleRecord {
         writeln!(f, "Env: {}", self.ref_env)?;
         writeln!(f, "claims:")?;
         for c in &self.ref_claims {
-            writeln!(f, "  {}", c)?;
+            writeln!(f, "  {c}")?;
         }
         Ok(())
     }
@@ -538,7 +538,7 @@ pub struct WrappedReferenceTripleRecord {
 impl std::fmt::Display for WrappedReferenceTripleRecord {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for r in &self.wrapped {
-            write!(f, "{}", r)?;
+            write!(f, "{r}")?;
         }
         Ok(())
     }
@@ -571,10 +571,10 @@ impl TryFrom<Vec<Value>> for WrappedReferenceTripleRecord {
         for entries in value.chunks(2) {
             let env: EnvironmentMap = entries[0]
                 .deserialized()
-                .map_err(|e| Error::Deserialize(format!("env {:?}", e)))?;
+                .map_err(|e| Error::Deserialize(format!("env {e:?}")))?;
             let claims: Vec<MeasurementMap> = entries[1]
                 .deserialized()
-                .map_err(|e| Error::Deserialize(format!("claims {:?}", e)))?;
+                .map_err(|e| Error::Deserialize(format!("claims {e:?}")))?;
             wrapped.push(ReferenceTripleRecord {
                 ref_env: env,
                 ref_claims: claims,
@@ -598,7 +598,7 @@ pub struct MeasurementMap {
 impl std::fmt::Display for MeasurementMap {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         if let Some(mkey) = &self.mkey {
-            write!(f, "{} => ", mkey)?;
+            write!(f, "{mkey} => ")?;
         }
         write!(f, "{}", self.mval)?;
         Ok(())
@@ -624,7 +624,7 @@ enum IdType {
 impl std::fmt::Display for IdType {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            IdType::Id(s) => write!(f, "{}", s),
+            IdType::Id(s) => write!(f, "{s}"),
             IdType::Bytes(b) => write!(f, "{}", hex::encode(b)),
         }
     }
@@ -753,7 +753,7 @@ pub struct WrappedComid {
 impl std::fmt::Display for WrappedComid {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         for c in &self.wrapped {
-            write!(f, "{}", c)?;
+            write!(f, "{c}")?;
         }
         Ok(())
     }
@@ -790,7 +790,7 @@ impl TryFrom<Value> for WrappedComid {
                     match a {
                         Value::Bytes(b) => {
                             let c: Comid = ciborium::from_reader(&b[..])
-                                .map_err(|e| Error::Deserialize(format!("comid {:?}", e)))?;
+                                .map_err(|e| Error::Deserialize(format!("comid {e:?}")))?;
                             wrapped.push(c);
                         }
                         _ => {
@@ -920,13 +920,13 @@ impl Corim {
     pub fn from_file<P: AsRef<std::path::Path>>(path: P) -> Result<Self, Error> {
         let bytes = std::fs::read(&path).map_err(Error::Io)?;
         ciborium::from_reader(&bytes[..])
-            .map_err(|e| Error::Deserialize(format!("from file {:?}", e)))
+            .map_err(|e| Error::Deserialize(format!("from file {e:?}")))
     }
 
     pub fn to_vec(&self) -> Result<Vec<u8>, Error> {
         let mut bytes = Vec::new();
         ciborium::into_writer(&self, &mut bytes)
-            .map_err(|e| Error::Deserialize(format!("into bytes {:?}", e)))?;
+            .map_err(|e| Error::Deserialize(format!("into bytes {e:?}")))?;
         Ok(bytes)
     }
 
@@ -1067,7 +1067,7 @@ impl TryFrom<Value> for WrappedCorimMetaMap {
         match value {
             Value::Bytes(b) => {
                 let wrapped: CorimMetaMap = ciborium::from_reader(&b[..])
-                    .map_err(|e| Error::Deserialize(format!("meta map {:?}", e)))?;
+                    .map_err(|e| Error::Deserialize(format!("meta map {e:?}")))?;
                 Ok(WrappedCorimMetaMap { wrapped })
             }
             _ => Err(Error::WrongValue(
@@ -1155,7 +1155,7 @@ impl TryFrom<Value> for SignedCorim {
                             Value::Bytes(b) => {
                                 let internal: ProtectedCorimHeaderMap =
                                     ciborium::from_reader(&b[..]).map_err(|e| {
-                                        Error::Deserialize(format!("protected {:?}", e))
+                                        Error::Deserialize(format!("protected {e:?}"))
                                     })?;
                                 internal
                             }
@@ -1169,7 +1169,7 @@ impl TryFrom<Value> for SignedCorim {
                         let unprotected = vals[1].clone();
                         let payload: Corim = match &vals[2] {
                             Value::Bytes(ref b) => ciborium::from_reader(&b[..])
-                                .map_err(|e| Error::Deserialize(format!("corim {:?}", e)))?,
+                                .map_err(|e| Error::Deserialize(format!("corim {e:?}")))?,
                             _ => {
                                 return Err(Error::WrongValue(
                                     "SignedCorim payload".to_string(),
@@ -1215,11 +1215,11 @@ fn _pretty_print(v: Value, level: usize) -> String {
     }
     let mut out = String::new();
     match v {
-        Value::Integer(i) => write!(&mut out, "Integer {:?}", i).unwrap(),
+        Value::Integer(i) => write!(&mut out, "Integer {i:?}").unwrap(),
         Value::Bytes(_b) => write!(&mut out, "Bytes").unwrap(),
-        Value::Float(f) => write!(&mut out, "Float {}", f).unwrap(),
-        Value::Text(ss) => write!(&mut out, "\"{}\"", ss).unwrap(),
-        Value::Bool(b) => write!(&mut out, "{}", b).unwrap(),
+        Value::Float(f) => write!(&mut out, "Float {f}").unwrap(),
+        Value::Text(ss) => write!(&mut out, "\"{ss}\"").unwrap(),
+        Value::Bool(b) => write!(&mut out, "{b}").unwrap(),
         Value::Null => write!(&mut out, "()").unwrap(),
         Value::Tag(t, v) => write!(
             &mut out,
@@ -1233,7 +1233,7 @@ fn _pretty_print(v: Value, level: usize) -> String {
             for v in vals {
                 writeln!(&mut out, "{}{}", space, _pretty_print(v.clone(), level + 1)).unwrap();
             }
-            writeln!(&mut out, "{}]", space).unwrap()
+            writeln!(&mut out, "{space}]").unwrap()
         }
         Value::Map(vals) => {
             writeln!(&mut out, "MAP[").unwrap();
@@ -1247,7 +1247,7 @@ fn _pretty_print(v: Value, level: usize) -> String {
                 )
                 .unwrap();
             }
-            writeln!(&mut out, "{}]", space).unwrap()
+            writeln!(&mut out, "{space}]").unwrap()
         }
         _ => todo!(),
     }
