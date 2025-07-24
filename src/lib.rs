@@ -921,6 +921,11 @@ impl Corim {
         }
     }
 
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
+        ciborium::from_reader(&bytes[..])
+            .map_err(|e| Error::Deserialize(format!("from bytes {:?}", e)))
+    }
+
     pub fn from_file<P: AsRef<std::path::Path>>(path: P) -> Result<Self, Error> {
         let bytes = std::fs::read(&path).map_err(Error::Io)?;
         ciborium::from_reader(&bytes[..])
