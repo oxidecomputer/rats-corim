@@ -940,7 +940,11 @@ impl Corim {
             return Err(Error::MultipleComid);
         }
 
-        self.tags.wrapped[0].tag_identity.version.clone().ok_or(Error::MissingVersion)
+        self.tags.wrapped[0]
+            .tag_identity
+            .version
+            .clone()
+            .ok_or(Error::MissingVersion)
     }
 
     pub fn iter_digests(&self) -> impl Iterator<Item = Digest> {
