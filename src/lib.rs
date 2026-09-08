@@ -207,7 +207,7 @@ pub struct Digest {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(try_from = "Vec<Value>", into = "Value")]
 pub struct WrappedDigests {
-    wrapped: Vec<Digest>,
+    pub wrapped: Vec<Digest>,
 }
 
 impl std::fmt::Display for WrappedDigests {
@@ -358,7 +358,7 @@ pub struct MeasurementValuesMap {
     #[serde(rename = 0x1, default, skip_serializing_if = Option::is_none)]
     svn: Option<SvnTypeChoice>,
     #[serde(rename = 0x2, default, skip_serializing_if = Option::is_none)]
-    digests: Option<Vec<WrappedDigests>>,
+    pub digests: Option<Vec<WrappedDigests>>,
     #[serde(rename = 0x3, default, skip_serializing_if = Option::is_none)]
     flags: Option<FlagsMap>,
     #[serde(rename = 0x4, default, skip_serializing_if = Option::is_none)]
@@ -429,7 +429,7 @@ serde_workaround! {
 #[derive(Debug, Clone)]
 pub struct Triple {
     #[serde(rename = 0x0, default, skip_serializing_if = Vec::is_empty)]
-    reference_triple: Vec<WrappedReferenceTripleRecord>,
+    pub reference_triple: Vec<WrappedReferenceTripleRecord>,
     #[serde(rename = 0x1, default, skip_serializing_if = Vec::is_empty)]
     endorsed_triple: Vec<WrappedReferenceTripleRecord>,
 }
@@ -519,7 +519,7 @@ impl EnvironmentMap {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ReferenceTripleRecord {
     ref_env: EnvironmentMap,
-    ref_claims: Vec<MeasurementMap>,
+    pub ref_claims: Vec<MeasurementMap>,
 }
 
 impl std::fmt::Display for ReferenceTripleRecord {
@@ -536,7 +536,7 @@ impl std::fmt::Display for ReferenceTripleRecord {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(try_from = "Vec<Value>", into = "Value")]
 pub struct WrappedReferenceTripleRecord {
-    wrapped: Vec<ReferenceTripleRecord>,
+    pub wrapped: Vec<ReferenceTripleRecord>,
 }
 
 impl std::fmt::Display for WrappedReferenceTripleRecord {
@@ -593,9 +593,9 @@ serde_workaround! {
 #[derive(Debug, Clone)]
 pub struct MeasurementMap {
     #[serde(rename = 0x0, default, skip_serializing_if = Option::is_none)]
-    mkey: Option<TypeChoice>,
+    pub mkey: Option<TypeChoice>,
     #[serde(rename = 0x1)]
-    mval: MeasurementValuesMap,
+    pub mval: MeasurementValuesMap,
 }
 }
 
@@ -722,7 +722,7 @@ pub struct Comid {
     #[serde(rename = 0x3, default, skip_serializing_if = Option::is_none)]
     linked_tags: Option<Vec<LinkedTagMap>>,
     #[serde(rename = 0x4)]
-    triples: Triple,
+    pub triples: Triple,
 }
 }
 
@@ -751,7 +751,7 @@ const COMID_TAG: u64 = 506;
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(try_from = "Value", into = "Value")]
 pub struct WrappedComid {
-    wrapped: Vec<Comid>,
+    pub wrapped: Vec<Comid>,
 }
 
 impl std::fmt::Display for WrappedComid {
@@ -885,7 +885,7 @@ pub struct Corim {
     #[serde(rename = 0x0)]
     pub id: String,
     #[serde(rename = 0x1)]
-    tags: WrappedComid,
+    pub tags: WrappedComid,
     #[serde(rename = 0x2, default, skip_serializing_if = Vec::is_empty)]
     dependent_rims: Vec<Locator>,
     #[serde(rename = 0x3, default, skip_serializing_if = Option::is_none)]
