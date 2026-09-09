@@ -241,7 +241,7 @@ impl TryFrom<Vec<Value>> for WrappedDigests {
     type Error = Error;
 
     fn try_from(value: Vec<Value>) -> Result<Self, Self::Error> {
-        if value.len() % 2 != 0 {
+        if !value.len().is_multiple_of(2) {
             return Err(Self::Error::BadArrayLen);
         }
         let mut wrapped = vec![];
@@ -568,7 +568,7 @@ impl TryFrom<Vec<Value>> for WrappedReferenceTripleRecord {
     type Error = Error;
 
     fn try_from(value: Vec<Value>) -> Result<Self, Self::Error> {
-        if value.len() % 2 != 0 {
+        if !value.len().is_multiple_of(2) {
             return Err(Error::BadArrayLen);
         }
         let mut wrapped = vec![];
